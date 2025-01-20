@@ -21,11 +21,13 @@ app.use(cors({
 app.use(errorHandler);
 
 const userRouter = require("./routes/user");
+const eventRouter = require("./routes/event");
  
  
   
 //Routes
 app.use(`${api}/users`, userRouter);
+app.use(`${api}/events`, eventRouter);
  
 
 //Database

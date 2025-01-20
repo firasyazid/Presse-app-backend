@@ -61,9 +61,9 @@ const userTransporter = nodemailer.createTransport({
 
 router.post("/inscription", async (req, res) => {
   try {
-    const { fullname, email, password, phone, isAdmin = false } = req.body;
+    const { username, email, password, phone, isAdmin = false } = req.body;
 
-    if (!fullname || !email || !password) {
+    if (!username || !email || !password) {
       return res.status(400).send("Fullname, email, and password are required.");
     }
 
@@ -74,7 +74,7 @@ router.post("/inscription", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const user = new User({
-      fullname,
+      username,
       email,
       passwordHash,
       phone,
@@ -91,7 +91,7 @@ router.post("/inscription", async (req, res) => {
       from: "firasyazid4@gmail.com",
       to: email,
       subject: "Bienvenue sur notre plateforme !",
-      text: `Bonjour ${fullname},\n\nNous sommes ravis de vous accueillir sur notre plateforme. N'hésitez pas à explorer toutes nos fonctionnalités.\n\nCordialement,\nL'équipe.`,
+      text: `Bonjour ${username},\n\nNous sommes ravis de vous accueillir sur notre plateforme. N'hésitez pas à explorer toutes nos fonctionnalités.\n\nCordialement,\nL'équipe.`,
     };
 
     try {
@@ -103,7 +103,7 @@ router.post("/inscription", async (req, res) => {
 
     res.status(201).send({
       id: savedUser.id,
-      fullname: savedUser.fullname,
+      username: savedUser.username,
       email: savedUser.email,
       phone: savedUser.phone,
       isAdmin: savedUser.isAdmin,
@@ -147,7 +147,7 @@ router.put("/:id", async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.params.id,
       {
-        fullname: req.body.fullname,
+        username: req.body.username,
         email: req.body.email,
         passwordHash: newPassword,
         phone: req.body.phone,
@@ -183,8 +183,7 @@ router.post("/login", async (req, res) => {
       return res.status(404).send("Utilisateur non trouvé");
     }
 
-    // Vérification que l'utilisateur a un mot de passe
-    if (!user.passwordHash) {
+     if (!user.passwordHash) {
       return res.status(400).send("L'utilisateur n'a pas de mot de passe défini.");
     }
 
@@ -204,7 +203,7 @@ router.post("/login", async (req, res) => {
         userId: user.id,
         token: token,
         isAdmin: user.isAdmin,
-        fullname: user.fullname,
+        username: user.username,
         phone: user.phone,
       });
     } else {
