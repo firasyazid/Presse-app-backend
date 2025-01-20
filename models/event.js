@@ -9,45 +9,51 @@ const eventSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  content : { 
+  content: {
     type: String,
     required: true,
-
   },
   image: {
     type: String,
-    default: ""
-   },
+    default: "",
+  },
   image2: {
     type: String,
-    default: ""
-
-   },
+    default: "",
+  },
   video: {
     type: String,
     default: "",
-
-},
-    category: {
-        type: String,
-        enum: ["invitation", "communiqué", "dossier de presse"],
-        required: true,
-      },
+  },
+  category: {
+    type: String,
+    enum: ["invitation", "communiqué", "dossier de presse"],
+    required: true,
+  },
 
   nombreDeParticipants: {
     type: Number,
     default: 0,
   },
- 
+
   assignes: {
     type: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-      }
+      },
     ],
     default: [],
   },
+  location: {
+    type: String,
+    default: "",
+  }, 
+
+  createdAt: { 
+    type: Date,
+    default: Date.now(),
+  }
 });
 
 module.exports = mongoose.model("Event", eventSchema);

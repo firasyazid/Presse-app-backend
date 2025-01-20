@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Event = require("../models/event");
 const multer = require("multer");
+const { User } = require("../models/user");
 
 const FILE_TYPE_MAP = {
   "image/png": "png",
@@ -23,6 +24,27 @@ const storage = multer.diskStorage({
 
 const uploadOptions = multer({ storage: storage });
 
+
+
+
+router.get("/monthly-summary", async (req, res) => {
+  try {
+    const summary = await Event.aggregate([
+      {
+        $group: {
+          _id: { $month: "$createdAt" }, 
+          totalEvents: { $sum: 1 },  
+        },
+      },
+      { $sort: { _id: 1 } },  
+    ]);
+
+    res.status(200).send(summary);
+  } catch (error) {
+    console.error("Error fetching monthly event summary:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 // POST Route
 router.post(
   "/",
@@ -60,7 +82,8 @@ router.post(
         image2: image2Url,
         nombreDeParticipants: req.body.nombreDeParticipants || 0,
         assignes: req.body.assignes || [],
-        category: req.body.category, // New field added
+        category: req.body.category, // Existing field
+        location: req.body.location || "", // Optional field with a default value
       });
 
       const savedEvent = await event.save();
@@ -75,6 +98,7 @@ router.post(
     }
   }
 );
+
 
 // PUT Route
 router.put(
@@ -101,7 +125,8 @@ router.put(
       if (req.body.assignes) {
         updateFields.assignes = req.body.assignes;
       }
-      if (req.body.category) updateFields.category = req.body.category; // New field added
+      if (req.body.category) updateFields.category = req.body.category; 
+      if (req.body.location) updateFields.location = req.body.location; 
 
       if (files["image"] && files["image"][0]) {
         updateFields.image = `${basePath}${files["image"][0].filename}`;
@@ -114,7 +139,7 @@ router.put(
       }
 
       const updatedEvent = await Event.findByIdAndUpdate(id, updateFields, {
-        new: true,
+        new: true, // Return the updated document
       });
 
       if (!updatedEvent) {
@@ -129,13 +154,19 @@ router.put(
   }
 );
 
+
 // GET All Events
 router.get("/", async (req, res) => {
   try {
-    const events = await Event.find();
-    if (!events) {
+     const events = await Event.find().populate({
+      path: "assignes",
+      select: "username email",  
+    });
+
+    if (!events || events.length === 0) {
       return res.status(404).send("No events found.");
     }
+
     res.status(200).send(events);
   } catch (error) {
     console.error("Error fetching events:", error);
@@ -146,7 +177,10 @@ router.get("/", async (req, res) => {
 // GET Event by ID
 router.get("/:id", async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id);
+    const event = await Event.findById(req.params.id).populate({
+      path: "assignes",
+      select: "username email",  
+    });
     if (!event) {
       return res.status(404).send("Event not found.");
     }
@@ -170,5 +204,73 @@ router.delete("/:id", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
+
+
+
+router.post("/:eventId/assign", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { userId } = req.body;
+
+    // Find the event by ID
+    const event = await Event.findById(eventId).populate("assignes");
+    if (!event) {
+      return res.status(404).send("Event not found");
+    }
+
+    // Check if the event is full
+    if (event.nombreDeParticipants > 0 && event.assignes.length >= event.nombreDeParticipants) {
+      return res.status(400).send("No empty place available in this event");
+    }
+
+    // Verify if the user is already assigned
+    if (event.assignes.some((user) => user._id.toString() === userId)) {
+      return res.status(400).send("User is already assigned to this event");
+    }
+
+    // Verify if the user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).send("User not found");
+    }
+
+    // Assign the user to the event
+    event.assignes.push(userId);
+    await event.save();
+
+    res.status(200).send({
+      message: "User assigned successfully",
+      event,
+    });
+  } catch (error) {
+    console.error("Error assigning user to event:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+router.get("/:eventId/assignes", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+     const event = await Event.findById(eventId).populate({
+      path: "assignes",
+      select: "username email",  
+    });
+
+    if (!event) {
+      return res.status(404).send("Event not found.");
+    }
+
+     res.status(200).send(event.assignes);
+  } catch (error) {
+    console.error("Error fetching assigned users:", error);
+    res.status(500).send("Internal Server Error.");
+  }
+});
+
+
+
+
 
 module.exports = router;
