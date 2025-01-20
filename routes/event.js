@@ -45,6 +45,28 @@ router.get("/monthly-summary", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
+
+
+router.get("/category-distribution", async (req, res) => {
+  try {
+    const distribution = await Event.aggregate([
+      {
+        $group: {
+          _id: "$category", // Group by category
+          count: { $sum: 1 }, // Count the number of events per category
+        },
+      },
+    ]);
+
+    res.status(200).send(distribution);
+  } catch (error) {
+    console.error("Error fetching category distribution:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+
 // POST Route
 router.post(
   "/",
