@@ -29,13 +29,17 @@ const eventSchema = new mongoose.Schema({
     type: String,
     enum: ["invitation", "communiqué", "dossier de presse"],
     required: true,
+  }, 
+ 
+  type: {
+    type: [String],  
+    enum: ["Culture", "Sport", "Economie", "Médical", "Social"],  
+    required: true,  
   },
-
   nombreDeParticipants: {
     type: Number,
     default: 0,
   },
-
   assignes: {
     type: [
       {
@@ -49,7 +53,6 @@ const eventSchema = new mongoose.Schema({
     type: String,
     default: "",
   }, 
-
   createdAt: { 
     type: Date,
     default: Date.now(),

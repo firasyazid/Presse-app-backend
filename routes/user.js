@@ -61,32 +61,49 @@ const userTransporter = nodemailer.createTransport({
 
 router.post("/inscription", async (req, res) => {
   try {
-    const { username, email, password, phone, isAdmin = false } = req.body;
+    const { username, email, password, phone, isAdmin = false, type } = req.body;
 
-    if (!username || !email || !password) {
-      return res.status(400).send("Fullname, email, and password are required.");
+    // Validation for required fields
+    if (!username || !email || !password || !type || !Array.isArray(type)) {
+      return res
+        .status(400)
+        .send("Username, email, password, and type (as an array) are required.");
     }
 
+    // Check if all values in the `type` array are valid
+    const allowedTypes = ["Culture", "Sport", "Economie", "Médical", "Social"];
+    if (!type.every((t) => allowedTypes.includes(t))) {
+      return res
+        .status(400)
+        .send("Invalid type. Allowed values are: Culture, Sport, Economie, Médical, Social.");
+    }
+
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).send("User with this email already exists.");
     }
 
+    // Hash the password
     const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create a new user
     const user = new User({
       username,
       email,
       passwordHash,
       phone,
       isAdmin,
+      type, 
     });
 
+    // Save the user
     const savedUser = await user.save();
     if (!savedUser) {
       return res.status(400).send("The user could not be created.");
     }
 
-    // Envoyer l'email de bienvenue
+    // Send welcome email
     const mailOptions = {
       from: "firasyazid4@gmail.com",
       to: email,
@@ -101,18 +118,22 @@ router.post("/inscription", async (req, res) => {
       console.error("Erreur lors de l'envoi de l'email de bienvenue :", error);
     }
 
+    // Respond with user details
     res.status(201).send({
       id: savedUser.id,
       username: savedUser.username,
       email: savedUser.email,
       phone: savedUser.phone,
       isAdmin: savedUser.isAdmin,
+      type: savedUser.type, // Include the array of types in the response
     });
   } catch (error) {
     console.error("Error creating user:", error);
     res.status(500).send("Error creating user");
   }
 });
+
+
 
 router.get(`/`, async (req, res) => {
   const userList = await User.find().select("-passwordHash").sort({ _id: -1 });
@@ -152,6 +173,7 @@ router.put("/:id", async (req, res) => {
         passwordHash: newPassword,
         phone: req.body.phone,
         isAdmin: req.body.isAdmin,
+        type: req.body.type,
        },
       { new: true }
     );
@@ -284,7 +306,6 @@ router.put("/update/:userId", async (req, res) => {
     res.status(500).send("Error updating user");
   }
 });
- 
 
 router.post("/forgot-password", async (req, res) => {
   try {

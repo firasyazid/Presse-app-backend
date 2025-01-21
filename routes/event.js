@@ -95,17 +95,28 @@ router.post(
         image2Url = `${basePath}${files["image2"][0].filename}`;
       }
 
+      const { titre, description, content, category, type, location, nombreDeParticipants, assignes } = req.body;
+
+      // Validation for `type`
+      const allowedTypes = ["Culture", "Sport", "Economie", "Médical", "Social"];
+      if (!type || !Array.isArray(type) || !type.every((t) => allowedTypes.includes(t))) {
+        return res
+          .status(400)
+          .send("Invalid type. Allowed values are: Culture, Sport, Economie, Médical, Social.");
+      }
+
       const event = new Event({
-        titre: req.body.titre,
-        description: req.body.description,
-        content: req.body.content,
+        titre,
+        description,
+        content,
         image: imageUrl,
         video: videoUrl,
         image2: image2Url,
-        nombreDeParticipants: req.body.nombreDeParticipants || 0,
-        assignes: req.body.assignes || [],
-        category: req.body.category, // Existing field
-        location: req.body.location || "", // Optional field with a default value
+        nombreDeParticipants: nombreDeParticipants || 0,
+        assignes: assignes || [],
+        category,
+        location: location || "",
+        type,  
       });
 
       const savedEvent = await event.save();
@@ -120,6 +131,7 @@ router.post(
     }
   }
 );
+
 
 
 // PUT Route
@@ -147,8 +159,20 @@ router.put(
       if (req.body.assignes) {
         updateFields.assignes = req.body.assignes;
       }
-      if (req.body.category) updateFields.category = req.body.category; 
-      if (req.body.location) updateFields.location = req.body.location; 
+      if (req.body.category) updateFields.category = req.body.category;
+      if (req.body.location) updateFields.location = req.body.location;
+
+      // Validation for `type` field
+      if (req.body.type) {
+        const allowedTypes = ["Culture", "Sport", "Economie", "Médical", "Social"];
+        const typeArray = Array.isArray(req.body.type) ? req.body.type : [req.body.type];
+        if (!typeArray.every((t) => allowedTypes.includes(t))) {
+          return res
+            .status(400)
+            .send("Invalid type. Allowed values are: Culture, Sport, Economie, Médical, Social.");
+        }
+        updateFields.type = typeArray;
+      }
 
       if (files["image"] && files["image"][0]) {
         updateFields.image = `${basePath}${files["image"][0].filename}`;
@@ -161,7 +185,7 @@ router.put(
       }
 
       const updatedEvent = await Event.findByIdAndUpdate(id, updateFields, {
-        new: true, // Return the updated document
+        new: true,  
       });
 
       if (!updatedEvent) {
@@ -175,6 +199,7 @@ router.put(
     }
   }
 );
+
 
 
 // GET All Events
@@ -226,9 +251,6 @@ router.delete("/:id", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
-
-
-
 
 router.post("/:eventId/assign", async (req, res) => {
   try {

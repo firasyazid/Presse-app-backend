@@ -37,6 +37,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  type: {
+    type: [String],  
+    enum: ["Culture", "Sport", "Economie", "Médical", "Social"],  
+    required: true,  
+  },
 });
 
 userSchema.virtual("id").get(function () {
