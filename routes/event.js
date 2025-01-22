@@ -3,6 +3,9 @@ const router = express.Router();
 const Event = require("../models/event");
 const multer = require("multer");
 const { User } = require("../models/user");
+const { Expo } = require('expo-server-sdk');
+const UserPushToken = require('../models/userPushTokenSchema');  
+let expo = new Expo();
 
 const FILE_TYPE_MAP = {
   "image/png": "png",
@@ -46,6 +49,46 @@ router.get("/monthly-summary", async (req, res) => {
   }
 });
 
+// GET Events by Type
+router.get("/by-type", async (req, res) => {
+  try {
+    const { type } = req.query;
+
+    // Ensure `type` query parameter is provided
+    if (!type) {
+      return res.status(400).send("Please provide at least one type.");
+    }
+
+    // Convert `type` into an array if it's not already one
+    const typeArray = Array.isArray(type) ? type : [type];
+
+    // Validate the types against the allowed values
+    const allowedTypes = ["Culture", "Sport", "Economie", "Médical", "Social"];
+    if (!typeArray.every((t) => allowedTypes.includes(t))) {
+      return res
+        .status(400)
+        .send("Invalid type. Allowed values are: Culture, Sport, Economie, Médical, Social.");
+    }
+
+    // Query the database for events that match the provided types
+    const events = await Event.find({ type: { $in: typeArray } }) 
+    .sort({ createdAt: -1 }) // Sort by `createdAt` in descending order
+
+    .populate({
+      path: "assignes",
+      select: "username email",
+    });
+
+    if (!events || events.length === 0) {
+      return res.status(404).send("No events found for the provided type(s).");
+    }
+
+    res.status(200).send(events);
+  } catch (error) {
+    console.error("Error fetching events by type:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 
 router.get("/category-distribution", async (req, res) => {
@@ -95,7 +138,17 @@ router.post(
         image2Url = `${basePath}${files["image2"][0].filename}`;
       }
 
-      const { titre, description, content, category, type, location, nombreDeParticipants, assignes } = req.body;
+      const {
+        titre,
+        description,
+        content,
+        category,
+        type,
+        location,
+        nombreDeParticipants,
+        assignes,
+        eventDate,
+      } = req.body;
 
       // Validation for `type`
       const allowedTypes = ["Culture", "Sport", "Economie", "Médical", "Social"];
@@ -103,6 +156,16 @@ router.post(
         return res
           .status(400)
           .send("Invalid type. Allowed values are: Culture, Sport, Economie, Médical, Social.");
+      }
+
+      // Validation for `eventDate`
+      if (!eventDate) {
+        return res.status(400).send("Event date is required.");
+      }
+
+      const parsedEventDate = new Date(eventDate);
+      if (isNaN(parsedEventDate.getTime())) {
+        return res.status(400).send("Invalid event date format.");
       }
 
       const event = new Event({
@@ -116,12 +179,45 @@ router.post(
         assignes: assignes || [],
         category,
         location: location || "",
-        type,  
+        type,
+        eventDate: parsedEventDate,
       });
 
       const savedEvent = await event.save();
       if (!savedEvent) {
         return res.status(500).send("The event could not be created");
+      }
+
+      //// Step 1: Fetch all Expo push tokens
+      const tokens = await UserPushToken.find().select("expoPushToken");
+      if (tokens && tokens.length > 0) {
+        let messages = [];
+
+        // Step 2: Create notification messages for each token
+        for (let tokenDoc of tokens) {
+          const expoPushToken = tokenDoc.expoPushToken;
+          if (Expo.isExpoPushToken(expoPushToken)) {
+            messages.push({
+              to: expoPushToken,
+              sound: "default",
+              title: "Nouvel événement ajouté !",
+              body: `Découvrez ${titre}. Restez informé des dernières nouveautés.`,
+              data: { eventId: savedEvent._id },
+            });
+          }
+        }
+
+        // Step 3: Chunk and send notifications
+        let chunks = expo.chunkPushNotifications(messages);
+        let tickets = [];
+        for (let chunk of chunks) {
+          try {
+            let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+            tickets.push(...ticketChunk);
+          } catch (error) {
+            console.error("Error sending push notifications:", error);
+          }
+        }
       }
 
       res.status(201).send(savedEvent);
@@ -131,7 +227,6 @@ router.post(
     }
   }
 );
-
 
 
 // PUT Route
@@ -174,6 +269,15 @@ router.put(
         updateFields.type = typeArray;
       }
 
+      // Validation for `eventDate`
+      if (req.body.eventDate) {
+        const parsedEventDate = new Date(req.body.eventDate);
+        if (isNaN(parsedEventDate.getTime())) {
+          return res.status(400).send("Invalid event date format.");
+        }
+        updateFields.eventDate = parsedEventDate;
+      }
+
       if (files["image"] && files["image"][0]) {
         updateFields.image = `${basePath}${files["image"][0].filename}`;
       }
@@ -199,8 +303,6 @@ router.put(
     }
   }
 );
-
-
 
 // GET All Events
 router.get("/", async (req, res) => {
@@ -263,14 +365,20 @@ router.post("/:eventId/assign", async (req, res) => {
       return res.status(404).send("Event not found");
     }
 
+    // Check if the event date has passed
+    const now = new Date();
+    if (event.eventDate && new Date(event.eventDate) < now) {
+      return res.status(400).send("La date de l'événement est déjà passée");
+    }
+
     // Check if the event is full
     if (event.nombreDeParticipants > 0 && event.assignes.length >= event.nombreDeParticipants) {
-      return res.status(400).send("No empty place available in this event");
+      return res.status(400).send("Aucune place disponible pour cet événement");
     }
 
     // Verify if the user is already assigned
     if (event.assignes.some((user) => user._id.toString() === userId)) {
-      return res.status(400).send("User is already assigned to this event");
+      return res.status(400).send("L'utilisateur est déjà assigné à cet événement");
     }
 
     // Verify if the user exists
@@ -284,7 +392,7 @@ router.post("/:eventId/assign", async (req, res) => {
     await event.save();
 
     res.status(200).send({
-      message: "User assigned successfully",
+      message: "L'utilisateur a été assigné avec succès à l'événement",
       event,
     });
   } catch (error) {
@@ -292,6 +400,7 @@ router.post("/:eventId/assign", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
 
 router.get("/:eventId/assignes", async (req, res) => {
   try {
@@ -314,7 +423,28 @@ router.get("/:eventId/assignes", async (req, res) => {
 });
 
 
+router.get("/assigned-events/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
 
+    // Find all events where the user is in the assignes array
+    const assignedEvents = await Event.find({ assignes: userId })
+    .sort({ createdAt: -1 }) 
+      .populate({
+        path: "assignes",
+        select: "username email", 
+      })
+      .exec();
 
+    if (!assignedEvents || assignedEvents.length === 0) {
+      return res.status(404).send("No events found for the specified user.");
+    }
+
+    res.status(200).send(assignedEvents);
+  } catch (error) {
+    console.error("Error fetching assigned events:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 module.exports = router;

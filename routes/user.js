@@ -7,6 +7,7 @@ const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const crypto = require("crypto");
  const multer = require("multer");
+const { type } = require("os");
 
 
 const FILE_TYPE_MAP = {
@@ -133,8 +134,6 @@ router.post("/inscription", async (req, res) => {
   }
 });
 
-
-
 router.get(`/`, async (req, res) => {
   const userList = await User.find().select("-passwordHash").sort({ _id: -1 });
 
@@ -227,6 +226,7 @@ router.post("/login", async (req, res) => {
         isAdmin: user.isAdmin,
         username: user.username,
         phone: user.phone,
+        type : user.type,
       });
     } else {
       return res.status(401).send("Mot de passe incorrect");
@@ -323,8 +323,7 @@ router.post("/forgot-password", async (req, res) => {
     user.tokenPasswordExpiration = Date.now() + 60 * 60 * 1000;  
     await user.save();
 
-    // Configuration de Nodemailer
-    const userTransporter = nodemailer.createTransport({
+     const userTransporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
         user: "firasyazid4@gmail.com",
@@ -530,7 +529,32 @@ router.put("/update-password/:userId", async (req, res) => {
   }
 });
 
- 
+router.put(
+  "/:userId/update-image",
+  uploadOptions.single("image"),
+  async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const file = req.file;
+      const basePath = `${req.protocol}://${req.get("host")}/public/uploads/`;
+
+      const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { image: `${basePath}${file.filename}` },
+        { new: true }
+      );
+
+      if (!updatedUser) {
+        return res.status(404).send("User not found");
+      }
+
+      res.send(updatedUser);
+    } catch (error) {
+      console.error(error);
+      res.status(500).send("Error updating user's image");
+    }
+  }
+);
 
 router.put(
   "/:userId/update-image",
@@ -558,6 +582,33 @@ router.put(
     }
   }
 );
+router.post("/send-email", async (req, res) => {
+  const { email, message } = req.body;
+
+  // Input validation
+  if (!email || !message) {
+    return res.status(400).json({ error: "Email and message are required." });
+  }
+
+  try {
+    // Email options
+    const mailOptions = {
+      from: email,  
+      to: "firasyazid4@gmail.com",  
+      subject: "New Message from Contact Form",  
+      text: `You have received a message from ${email}:\n\n${message}`,  
+    };
+
+     const info = await userTransporter.sendMail(mailOptions);
+
+    console.log("Email sent:", info.response);
+    res.status(200).json({ success: true, message: "Email sent successfully!" });
+  } catch (error) {
+    console.error("Error sending email:", error);
+    res.status(500).json({ success: false, error: "Failed to send email." });
+  }
+});
+
 
  
 

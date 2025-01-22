@@ -22,12 +22,14 @@ app.use(errorHandler);
 
 const userRouter = require("./routes/user");
 const eventRouter = require("./routes/event");
+const UserPushTokenRouter = require("./routes/userPushToken");
  
  
   
 //Routes
 app.use(`${api}/users`, userRouter);
 app.use(`${api}/events`, eventRouter);
+app.use(`${api}/user-push-token`, UserPushTokenRouter);
  
 
 //Database
