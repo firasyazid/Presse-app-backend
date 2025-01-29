@@ -60,6 +60,11 @@ const userTransporter = nodemailer.createTransport({
   },
 });
 
+const generateBadgeId = () => {
+  const randomDigits = Math.floor(10000000 + Math.random() * 90000000); // Generates 8 random digits
+  return `com${randomDigits}`;
+};
+
 router.post("/inscription", async (req, res) => {
   try {
     const { username, email, password, phone, isAdmin = false, type } = req.body;
@@ -88,6 +93,9 @@ router.post("/inscription", async (req, res) => {
     // Hash the password
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Generate badgeId
+    const badgeId = generateBadgeId();
+
     // Create a new user
     const user = new User({
       username,
@@ -95,7 +103,8 @@ router.post("/inscription", async (req, res) => {
       passwordHash,
       phone,
       isAdmin,
-      type, 
+      type,
+      badgeId, // Add the generated badgeId
     });
 
     // Save the user
@@ -109,7 +118,7 @@ router.post("/inscription", async (req, res) => {
       from: "firasyazid4@gmail.com",
       to: email,
       subject: "Bienvenue sur notre plateforme !",
-      text: `Bonjour ${username},\n\nNous sommes ravis de vous accueillir sur notre plateforme. N'hésitez pas à explorer toutes nos fonctionnalités.\n\nCordialement,\nL'équipe.`,
+      text: `Bonjour ${username},\n\nNous sommes ravis de vous accueillir sur notre plateforme. Votre badgeId est ${badgeId}.\n\nCordialement,\nL'équipe.`,
     };
 
     try {
@@ -126,7 +135,8 @@ router.post("/inscription", async (req, res) => {
       email: savedUser.email,
       phone: savedUser.phone,
       isAdmin: savedUser.isAdmin,
-      type: savedUser.type, // Include the array of types in the response
+      type: savedUser.type,
+      badgeId: savedUser.badgeId,  
     });
   } catch (error) {
     console.error("Error creating user:", error);
@@ -609,8 +619,86 @@ router.post("/send-email", async (req, res) => {
   }
 });
 
+router.post("/inscription2", async (req, res) => {
+  try {
+    const { username, email, password, phone, isAdmin = false, type = ['Culture'] } = req.body;
 
- 
+    // Validation for required fields
+    if (!username || !email || !password) {
+      return res
+        .status(400)
+        .send("Username, email, and password are required.");
+    }
+
+    // Ensure type is an array
+    if (!Array.isArray(type)) {
+      return res
+        .status(400)
+        .send("Type must be an array.");
+    }
+
+    // Check if all values in the `type` array are valid
+    const allowedTypes = ["Culture", "Sport", "Economie", "Médical", "Social"];
+    if (!type.every((t) => allowedTypes.includes(t))) {
+      return res
+        .status(400)
+        .send("Invalid type. Allowed values are: Culture, Sport, Economie, Médical, Social.");
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).send("User with this email already exists.");
+    }
+
+    // Hash the password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create a new user
+    const user = new User({
+      username,
+      email,
+      passwordHash,
+      phone,
+      isAdmin,
+      type, 
+    });
+
+    // Save the user
+    const savedUser = await user.save();
+    if (!savedUser) {
+      return res.status(400).send("The user could not be created.");
+    }
+
+    // Send welcome email
+    const mailOptions = {
+      from: "firasyazid4@gmail.com",
+      to: email,
+      subject: "Bienvenue sur notre plateforme !",
+      text: `Bonjour ${username},\n\nNous sommes ravis de vous accueillir sur notre plateforme. N'hésitez pas à explorer toutes nos fonctionnalités.\n\nCordialement,\nL'équipe.`,
+    };
+
+    try {
+      await userTransporter.sendMail(mailOptions);
+      console.log("Email de bienvenue envoyé à", email);
+    } catch (error) {
+      console.error("Erreur lors de l'envoi de l'email de bienvenue :", error);
+    }
+
+    // Respond with user details
+    res.status(201).send({
+      id: savedUser.id,
+      username: savedUser.username,
+      email: savedUser.email,
+      phone: savedUser.phone,
+      isAdmin: savedUser.isAdmin,
+      type: savedUser.type,  
+    });
+  } catch (error) {
+    console.error("Error creating user:", error);
+    res.status(500).send("Error creating user");
+  }
+});
 
 
 module.exports = router;

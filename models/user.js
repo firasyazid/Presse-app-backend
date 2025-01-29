@@ -42,7 +42,13 @@ const userSchema = new mongoose.Schema({
     enum: ["Culture", "Sport", "Economie", "Médical", "Social"],  
     required: true,  
   },
+  badgeId: {
+    type: String,
+    unique: true,
+    default: '',
+  },
 });
+
 
 userSchema.virtual("id").get(function () {
   return this._id.toHexString();
